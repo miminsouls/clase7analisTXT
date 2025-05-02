@@ -1,90 +1,139 @@
 import streamlit as st
 import pandas as pd
-from collections import Counter
 from textblob import TextBlob
+import re
 from googletrans import Translator
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
-import io
 
-st.set_page_config(page_title="Análisis de Texto", layout="wide")
+# Configuración de la página
+st.set_page_config(
+    page_title="Analizador de Texto Simple",
+    page_icon="📊",
+    layout="wide"
+)
 
-st.title("📝 Análisis de Texto con IA")
+# Título y descripción
+st.title("📝 Analizador de Texto con TextBlob")
+st.markdown("""
+Esta aplicación utiliza TextBlob para realizar un análisis básico de texto:
+- Análisis de sentimiento y subjetividad
+- Extracción de palabras clave
+- Análisis de frecuencia de palabras
+""")
 
-modo = st.radio("Selecciona el modo de entrada:", ["Texto directo", "Archivo de texto"])
+# Barra lateral
+st.sidebar.title("Opciones")
+modo = st.sidebar.selectbox(
+    "Selecciona el modo de entrada:",
+    ["Texto directo", "Archivo de texto"]
+)
 
-# Función de procesamiento
+# Función para contar palabras sin NLTK
+def contar_palabras(texto):
+    stop_words = set([
+        # Palabras vacías en español e inglés (reducido por brevedad)
+        "a", "al", "de", "el", "la", "los", "las", "y", "en", "con", "por", "para", "que",
+        "es", "un", "una", "unos", "unas", "como", "del", "no", "sí", "yo", "tú", "él",
+        "ella", "nos", "vos", "ellos", "ellas", "mi", "mis", "su", "sus", "te", "se", "lo",
+        "do", "does", "is", "are", "am", "the", "of", "on", "in", "to", "by", "and", "an",
+        "this", "that", "was", "were", "be", "have", "has", "had", "not", "or", "it", "at",
+        "from", "but", "with", "they", "you", "he", "she", "we", "i"
+    ])
+    palabras = re.findall(r'\b\w+\b', texto.lower())
+    palabras_filtradas = [palabra for palabra in palabras if palabra not in stop_words and len(palabra) > 2]
+    contador = {}
+    for palabra in palabras_filtradas:
+        contador[palabra] = contador.get(palabra, 0) + 1
+    contador_ordenado = dict(sorted(contador.items(), key=lambda x: x[1], reverse=True))
+    return contador_ordenado, palabras_filtradas
+
+# Traductor
+translator = Translator()
+
+def traducir_texto(texto):
+    try:
+        return translator.translate(texto, src='es', dest='en').text
+    except Exception as e:
+        st.error(f"Error al traducir: {e}")
+        return texto
+
+# Procesamiento
 def procesar_texto(texto):
-    blob = TextBlob(texto)
-    traduccion = blob.translate(to='en')
-    sentimiento = traduccion.sentiment.polarity
-    subjetividad = traduccion.sentiment.subjectivity
-    palabras = [word.lower() for word in blob.words if word.isalpha()]
-    contador = Counter(palabras)
+    texto_original = texto
+    texto_ingles = traducir_texto(texto)
+    blob = TextBlob(texto_ingles)
+    sentimiento = blob.sentiment.polarity
+    subjetividad = blob.sentiment.subjectivity
+    frases_originales = [frase.strip() for frase in re.split(r'[.!?]+', texto_original) if frase.strip()]
+    frases_traducidas = [frase.strip() for frase in re.split(r'[.!?]+', texto_ingles) if frase.strip()]
+    frases_combinadas = []
+    for i in range(min(len(frases_originales), len(frases_traducidas))):
+        frases_combinadas.append({
+            "original": frases_originales[i],
+            "traducido": frases_traducidas[i]
+        })
+    contador_palabras, palabras = contar_palabras(texto_ingles)
     return {
-        "texto_original": texto,
-        "texto_traducido": str(traduccion),
         "sentimiento": sentimiento,
         "subjetividad": subjetividad,
-        "contador_palabras": contador
+        "frases": frases_combinadas,
+        "contador_palabras": contador_palabras,
+        "palabras": palabras,
+        "texto_original": texto_original,
+        "texto_traducido": texto_ingles
     }
 
-# Función para visualizaciones
+# Visualizaciones
 def crear_visualizaciones(resultados):
     col1, col2 = st.columns(2)
-
     with col1:
-        st.subheader("🔎 Sentimiento y Subjetividad")
-        st.write("**Sentimiento (Polaridad)**", f"{resultados['sentimiento']:.2f}")
-        st.progress(int((resultados['sentimiento'] + 1) * 50))  # escala 0-100
-        st.write("**Subjetividad**", f"{resultados['subjetividad']:.2f}")
-        st.progress(int(resultados['subjetividad'] * 100))
-
-        # Gráfico de torta del sentimiento
-        st.subheader("📊 Visualización de Sentimiento")
-        labels = ['Negativo', 'Neutro', 'Positivo']
-        if resultados['sentimiento'] > 0.05:
-            sizes = [0, 0, 1]
-        elif resultados['sentimiento'] < -0.05:
-            sizes = [1, 0, 0]
+        st.subheader("Análisis de Sentimiento y Subjetividad")
+        sentimiento_norm = (resultados["sentimiento"] + 1) / 2
+        st.write("**Sentimiento:**")
+        st.progress(sentimiento_norm)
+        if resultados["sentimiento"] > 0.05:
+            st.success(f"📈 Positivo ({resultados['sentimiento']:.2f})")
+        elif resultados["sentimiento"] < -0.05:
+            st.error(f"📉 Negativo ({resultados['sentimiento']:.2f})")
         else:
-            sizes = [0, 1, 0]
-        fig1, ax1 = plt.subplots()
-        ax1.pie(sizes, labels=labels, autopct='%1.0f%%', colors=['red', 'gray', 'green'])
-        ax1.axis('equal')
-        st.pyplot(fig1)
-
+            st.info(f"📊 Neutral ({resultados['sentimiento']:.2f})")
+        st.write("**Subjetividad:**")
+        st.progress(resultados["subjetividad"])
+        if resultados["subjetividad"] > 0.5:
+            st.warning(f"💭 Alta subjetividad ({resultados['subjetividad']:.2f})")
+        else:
+            st.info(f"📋 Baja subjetividad ({resultados['subjetividad']:.2f})")
     with col2:
-        st.subheader("🌥️ Nube de Palabras")
-        wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(resultados["contador_palabras"])
-        fig_wc, ax_wc = plt.subplots(figsize=(10, 5))
-        ax_wc.imshow(wordcloud, interpolation='bilinear')
-        ax_wc.axis("off")
-        st.pyplot(fig_wc)
+        st.subheader("Palabras más frecuentes")
+        if resultados["contador_palabras"]:
+            palabras_top = dict(list(resultados["contador_palabras"].items())[:10])
+            st.bar_chart(palabras_top)
 
-        st.subheader("📋 Top Palabras Más Comunes")
-        comunes = list(resultados["contador_palabras"].items())[:10]
-        df_comunes = pd.DataFrame(comunes, columns=["Palabra", "Frecuencia"])
-        st.dataframe(df_comunes)
+    # Traducción
+    st.subheader("Texto Traducido")
+    with st.expander("Ver traducción completa"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Texto Original (Español):**")
+            st.text(resultados["texto_original"])
+        with col2:
+            st.markdown("**Texto Traducido (Inglés):**")
+            st.text(resultados["texto_traducido"])
 
-# Entrada de texto
+    # Frases
+    st.subheader("Frases originales y traducidas")
+    for f in resultados["frases"]:
+        st.markdown(f"🔸 *{f['original']}* → **{f['traducido']}**")
+
+# Entrada
+texto = ""
 if modo == "Texto directo":
-    texto_entrada = st.text_area("✍️ Escribe o pega tu texto aquí:", height=200)
-elif modo == "Archivo de texto":
-    archivo = st.file_uploader("📁 Sube un archivo .txt", type="txt")
-    if archivo:
-        texto_entrada = archivo.read().decode("utf-8")
-    else:
-        texto_entrada = ""
+    texto = st.text_area("Introduce el texto aquí:", height=300)
+else:
+    archivo = st.file_uploader("Sube un archivo de texto (.txt):", type="txt")
+    if archivo is not None:
+        texto = archivo.read().decode("utf-8")
 
-# Procesar si hay texto
-if texto_entrada:
-    resultados = procesar_texto(texto_entrada)
-    st.subheader("📌 Resumen del Análisis")
-    st.write(f"**Texto Original:** {resultados['texto_original']}")
-    st.write(f"**Texto Traducido (al inglés):** {resultados['texto_traducido']}")
+# Ejecutar análisis
+if texto:
+    resultados = procesar_texto(texto)
     crear_visualizaciones(resultados)
-
-# Pie de página
-st.markdown("---")
-st.markdown("Hecho con ❤️ por [Tu Nombre o Proyecto] • Powered by Streamlit, TextBlob y Google Translate API")
