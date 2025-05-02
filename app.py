@@ -20,9 +20,6 @@ Esta aplicación utiliza TextBlob para realizar un análisis básico de texto:
 - Análisis de frecuencia de palabras
 """)
 
-# Mostrar imagen decorativa
-st.image("imagen_decorativa.jpg", use_column_width=True)
-
 # Barra lateral
 st.sidebar.title("Opciones")
 modo = st.sidebar.selectbox(
@@ -32,8 +29,8 @@ modo = st.sidebar.selectbox(
 
 # Función para contar palabras sin depender de NLTK
 def contar_palabras(texto):
+    # Lista básica de palabras vacías en español e inglés
     stop_words = set([
-        # Lista de palabras vacías en español e inglés
         "a", "al", "algo", "algunas", "algunos", "ante", "antes", "como", "con", "contra",
         "cual", "cuando", "de", "del", "desde", "donde", "durante", "e", "el", "ella",
         "ellas", "ellos", "en", "entre", "era", "eras", "es", "esa", "esas", "ese",
@@ -147,37 +144,40 @@ def crear_visualizaciones(resultados):
     
     # Visualización de sentimiento y subjetividad con barras de progreso de Streamlit
     with col1:
-        st.markdown("### Sentimiento")
-        st.progress(int((resultados["sentimiento"] + 1) * 50))  # Sentimiento en -1 a 1, ajustado a 0-100
+        st.subheader("Análisis de Sentimiento y Subjetividad")
+        
+        # Normalizar valores para mostrarlos en barras de progreso
+        # Sentimiento va de -1 a 1, subjetividad de 0 a 1
+        st.write("Sentimiento", f"{resultados['sentimiento']:.2f}")
+        st.progress(int((resultados['sentimiento'] + 1) * 50))  # Para que esté entre 0 y 100
+        st.write("Subjetividad", f"{resultados['subjetividad']:.2f}")
+        st.progress(int(resultados['subjetividad'] * 100))
     
+    # Visualización de palabras más comunes
     with col2:
-        st.markdown("### Subjetividad")
-        st.progress(int(resultados["subjetividad"] * 100))  # Subjetividad de 0 a 1, ajustado a 0-100
+        st.subheader("Frecuencia de Palabras")
+        palabra_mas_comun = list(resultados["contador_palabras"].items())[:10]
+        df_palabras = pd.DataFrame(palabra_mas_comun, columns=["Palabra", "Frecuencia"])
+        st.dataframe(df_palabras)
+
+# Lógica principal
+if modo == "Texto directo":
+    texto_entrada = st.text_area("Escribe o pega tu texto aquí:", height=200)
+elif modo == "Archivo de texto":
+    archivo = st.file_uploader("Sube un archivo de texto", type="txt")
+    if archivo:
+        texto_entrada = archivo.read().decode("utf-8")
+    else:
+        texto_entrada = ""
+
+# Si hay texto de entrada, procesar y mostrar resultados
+if texto_entrada:
+    resultados = procesar_texto(texto_entrada)
     
-    # Visualización de la frecuencia de palabras
-    st.markdown("### Frecuencia de palabras más comunes")
-    for palabra, frecuencia in resultados["contador_palabras"].items():
-        st.write(f"{palabra}: {frecuencia} veces")
-
-# Función para cargar un archivo de texto
-def cargar_archivo():
-    archivo = st.file_uploader("Sube un archivo de texto", type=["txt"])
-    if archivo is not None:
-        texto = archivo.read().decode("utf-8")
-        return texto
-    return ""
-
-# Función para mostrar la entrada de texto o archivo
-def procesar_entrada():
-    texto = ""
-    if modo == "Texto directo":
-        texto = st.text_area("Escribe tu texto aquí", height=250)
-    elif modo == "Archivo de texto":
-        texto = cargar_archivo()
-
-    if texto:
-        resultados = procesar_texto(texto)
-        crear_visualizaciones(resultados)
-
-# Procesar entrada y mostrar resultados
-procesar_entrada()
+    # Mostrar resultados
+    st.subheader("Resumen del Análisis")
+    st.write(f"**Texto Original**: {resultados['texto_original']}")
+    st.write(f"**Texto Traducido (al inglés)**: {resultados['texto_traducido']}")
+    
+    # Visualizaciones
+    crear_visualizaciones(resultados)
