@@ -1,183 +1,90 @@
 import streamlit as st
 import pandas as pd
+from collections import Counter
 from textblob import TextBlob
-import re
 from googletrans import Translator
+import matplotlib.pyplot as plt
+from wordcloud import WordCloud
+import io
 
-# Configuración de la página
-st.set_page_config(
-    page_title="Analizador de Texto Simple",
-    page_icon="📊",
-    layout="wide"
-)
+st.set_page_config(page_title="Análisis de Texto", layout="wide")
 
-# Título y descripción
-st.title("📝 Analizador de Texto con TextBlob")
-st.markdown("""
-Esta aplicación utiliza TextBlob para realizar un análisis básico de texto:
-- Análisis de sentimiento y subjetividad
-- Extracción de palabras clave
-- Análisis de frecuencia de palabras
-""")
+st.title("📝 Análisis de Texto con IA")
 
-# Barra lateral
-st.sidebar.title("Opciones")
-modo = st.sidebar.selectbox(
-    "Selecciona el modo de entrada:",
-    ["Texto directo", "Archivo de texto"]
-)
+modo = st.radio("Selecciona el modo de entrada:", ["Texto directo", "Archivo de texto"])
 
-# Función para contar palabras sin depender de NLTK
-def contar_palabras(texto):
-    # Lista básica de palabras vacías en español e inglés
-    stop_words = set([
-        "a", "al", "algo", "algunas", "algunos", "ante", "antes", "como", "con", "contra",
-        "cual", "cuando", "de", "del", "desde", "donde", "durante", "e", "el", "ella",
-        "ellas", "ellos", "en", "entre", "era", "eras", "es", "esa", "esas", "ese",
-        "eso", "esos", "esta", "estas", "este", "esto", "estos", "ha", "había", "han",
-        "has", "hasta", "he", "la", "las", "le", "les", "lo", "los", "me", "mi", "mía",
-        "mías", "mío", "míos", "mis", "mucho", "muchos", "muy", "nada", "ni", "no", "nos",
-        "nosotras", "nosotros", "nuestra", "nuestras", "nuestro", "nuestros", "o", "os", 
-        "otra", "otras", "otro", "otros", "para", "pero", "poco", "por", "porque", "que", 
-        "quien", "quienes", "qué", "se", "sea", "sean", "según", "si", "sido", "sin", 
-        "sobre", "sois", "somos", "son", "soy", "su", "sus", "suya", "suyas", "suyo", 
-        "suyos", "también", "tanto", "te", "tenéis", "tenemos", "tener", "tengo", "ti", 
-        "tiene", "tienen", "todo", "todos", "tu", "tus", "tuya", "tuyas", "tuyo", "tuyos", 
-        "tú", "un", "una", "uno", "unos", "vosotras", "vosotros", "vuestra", "vuestras", 
-        "vuestro", "vuestros", "y", "ya", "yo",
-        # Inglés
-        "a", "about", "above", "after", "again", "against", "all", "am", "an", "and", 
-        "any", "are", "aren't", "as", "at", "be", "because", "been", "before", "being", 
-        "below", "between", "both", "but", "by", "can't", "cannot", "could", "couldn't", 
-        "did", "didn't", "do", "does", "doesn't", "doing", "don't", "down", "during", 
-        "each", "few", "for", "from", "further", "had", "hadn't", "has", "hasn't", "have", 
-        "haven't", "having", "he", "he'd", "he'll", "he's", "her", "here", "here's", 
-        "hers", "herself", "him", "himself", "his", "how", "how's", "i", "i'd", "i'll", 
-        "i'm", "i've", "if", "in", "into", "is", "isn't", "it", "it's", "its", "itself", 
-        "let's", "me", "more", "most", "mustn't", "my", "myself", "no", "nor", "not", 
-        "of", "off", "on", "once", "only", "or", "other", "ought", "our", "ours", 
-        "ourselves", "out", "over", "own", "same", "shan't", "she", "she'd", "she'll", 
-        "she's", "should", "shouldn't", "so", "some", "such", "than", "that", "that's", 
-        "the", "their", "theirs", "them", "themselves", "then", "there", "there's", 
-        "these", "they", "they'd", "they'll", "they're", "they've", "this", "those", 
-        "through", "to", "too", "under", "until", "up", "very", "was", "wasn't", "we", 
-        "we'd", "we'll", "we're", "we've", "were",         "weren't", "what", "what's", "when", 
-        "when's", "where", "where's", "which", "while", "who", "who's", "whom", "why", 
-        "why's", "with", "would", "wouldn't", "you", "you'd", "you'll", "you're", "you've",
-        "your", "yours", "yourself", "yourselves"
-    ])
-    
-    # Limpiar y tokenizar texto
-    palabras = re.findall(r'\b\w+\b', texto.lower())
-    
-    # Filtrar palabras vacías y contar frecuencias
-    palabras_filtradas = [palabra for palabra in palabras 
-                         if palabra not in stop_words and len(palabra) > 2]
-    
-    # Contar frecuencias
-    contador = {}
-    for palabra in palabras_filtradas:
-        contador[palabra] = contador.get(palabra, 0) + 1
-    
-    # Ordenar por frecuencia
-    contador_ordenado = dict(sorted(contador.items(), key=lambda x: x[1], reverse=True))
-    
-    return contador_ordenado, palabras_filtradas
-
-# Inicializar el traductor
-translator = Translator()
-
-# Función para traducir texto del español al inglés
-def traducir_texto(texto):
-    try:
-        traduccion = translator.translate(texto, src='es', dest='en')
-        return traduccion.text
-    except Exception as e:
-        st.error(f"Error al traducir: {e}")
-        return texto  # Devolver el texto original si falla la traducción
-
-# Función para procesar el texto con TextBlob (versión con traducción)
+# Función de procesamiento
 def procesar_texto(texto):
-    # Guardar el texto original
-    texto_original = texto
-    
-    # Traducir el texto al inglés para mejor análisis
-    texto_ingles = traducir_texto(texto)
-    
-    # Analizar el texto traducido con TextBlob
-    blob = TextBlob(texto_ingles)
-    
-    # Análisis de sentimiento (esto no requiere corpus adicionales)
-    sentimiento = blob.sentiment.polarity
-    subjetividad = blob.sentiment.subjectivity
-    
-    # Extraer frases de manera simplificada (del texto original)
-    frases_originales = [frase.strip() for frase in re.split(r'[.!?]+', texto_original) if frase.strip()]
-    
-    # Extraer frases del texto traducido
-    frases_traducidas = [frase.strip() for frase in re.split(r'[.!?]+', texto_ingles) if frase.strip()]
-    
-    # Combinar frases originales y traducidas
-    frases_combinadas = []
-    for i in range(min(len(frases_originales), len(frases_traducidas))):
-        frases_combinadas.append({
-            "original": frases_originales[i],
-            "traducido": frases_traducidas[i]
-        })
-    
-    # Contar palabras con nuestra función simplificada (en el texto traducido)
-    contador_palabras, palabras = contar_palabras(texto_ingles)
-    
+    blob = TextBlob(texto)
+    traduccion = blob.translate(to='en')
+    sentimiento = traduccion.sentiment.polarity
+    subjetividad = traduccion.sentiment.subjectivity
+    palabras = [word.lower() for word in blob.words if word.isalpha()]
+    contador = Counter(palabras)
     return {
+        "texto_original": texto,
+        "texto_traducido": str(traduccion),
         "sentimiento": sentimiento,
         "subjetividad": subjetividad,
-        "frases": frases_combinadas,
-        "contador_palabras": contador_palabras,
-        "palabras": palabras,
-        "texto_original": texto_original,
-        "texto_traducido": texto_ingles
+        "contador_palabras": contador
     }
 
-# Función para crear visualizaciones usando componentes nativos de Streamlit
+# Función para visualizaciones
 def crear_visualizaciones(resultados):
     col1, col2 = st.columns(2)
-    
-    # Visualización de sentimiento y subjetividad con barras de progreso de Streamlit
-    with col1:
-        st.subheader("Análisis de Sentimiento y Subjetividad")
-        
-        # Normalizar valores para mostrarlos en barras de progreso
-        # Sentimiento va de -1 a 1, subjetividad de 0 a 1
-        st.write("Sentimiento", f"{resultados['sentimiento']:.2f}")
-        st.progress(int((resultados['sentimiento'] + 1) * 50))  # Para que esté entre 0 y 100
-        st.write("Subjetividad", f"{resultados['subjetividad']:.2f}")
-        st.progress(int(resultados['subjetividad'] * 100))
-    
-    # Visualización de palabras más comunes
-    with col2:
-        st.subheader("Frecuencia de Palabras")
-        palabra_mas_comun = list(resultados["contador_palabras"].items())[:10]
-        df_palabras = pd.DataFrame(palabra_mas_comun, columns=["Palabra", "Frecuencia"])
-        st.dataframe(df_palabras)
 
-# Lógica principal
+    with col1:
+        st.subheader("🔎 Sentimiento y Subjetividad")
+        st.write("**Sentimiento (Polaridad)**", f"{resultados['sentimiento']:.2f}")
+        st.progress(int((resultados['sentimiento'] + 1) * 50))  # escala 0-100
+        st.write("**Subjetividad**", f"{resultados['subjetividad']:.2f}")
+        st.progress(int(resultados['subjetividad'] * 100))
+
+        # Gráfico de torta del sentimiento
+        st.subheader("📊 Visualización de Sentimiento")
+        labels = ['Negativo', 'Neutro', 'Positivo']
+        if resultados['sentimiento'] > 0.05:
+            sizes = [0, 0, 1]
+        elif resultados['sentimiento'] < -0.05:
+            sizes = [1, 0, 0]
+        else:
+            sizes = [0, 1, 0]
+        fig1, ax1 = plt.subplots()
+        ax1.pie(sizes, labels=labels, autopct='%1.0f%%', colors=['red', 'gray', 'green'])
+        ax1.axis('equal')
+        st.pyplot(fig1)
+
+    with col2:
+        st.subheader("🌥️ Nube de Palabras")
+        wordcloud = WordCloud(width=800, height=400, background_color='white').generate_from_frequencies(resultados["contador_palabras"])
+        fig_wc, ax_wc = plt.subplots(figsize=(10, 5))
+        ax_wc.imshow(wordcloud, interpolation='bilinear')
+        ax_wc.axis("off")
+        st.pyplot(fig_wc)
+
+        st.subheader("📋 Top Palabras Más Comunes")
+        comunes = list(resultados["contador_palabras"].items())[:10]
+        df_comunes = pd.DataFrame(comunes, columns=["Palabra", "Frecuencia"])
+        st.dataframe(df_comunes)
+
+# Entrada de texto
 if modo == "Texto directo":
-    texto_entrada = st.text_area("Escribe o pega tu texto aquí:", height=200)
+    texto_entrada = st.text_area("✍️ Escribe o pega tu texto aquí:", height=200)
 elif modo == "Archivo de texto":
-    archivo = st.file_uploader("Sube un archivo de texto", type="txt")
+    archivo = st.file_uploader("📁 Sube un archivo .txt", type="txt")
     if archivo:
         texto_entrada = archivo.read().decode("utf-8")
     else:
         texto_entrada = ""
 
-# Si hay texto de entrada, procesar y mostrar resultados
+# Procesar si hay texto
 if texto_entrada:
     resultados = procesar_texto(texto_entrada)
-    
-    # Mostrar resultados
-    st.subheader("Resumen del Análisis")
-    st.write(f"**Texto Original**: {resultados['texto_original']}")
-    st.write(f"**Texto Traducido (al inglés)**: {resultados['texto_traducido']}")
-    
-    # Visualizaciones
+    st.subheader("📌 Resumen del Análisis")
+    st.write(f"**Texto Original:** {resultados['texto_original']}")
+    st.write(f"**Texto Traducido (al inglés):** {resultados['texto_traducido']}")
     crear_visualizaciones(resultados)
+
+# Pie de página
+st.markdown("---")
+st.markdown("Hecho con ❤️ por [Tu Nombre o Proyecto] • Powered by Streamlit, TextBlob y Google Translate API")
