@@ -1,74 +1,47 @@
-import streamlit as st
-from textblob import TextBlob
-from wordcloud import WordCloud
+import pandas as pd
 import matplotlib.pyplot as plt
-from collections import Counter
-import re
 from PIL import Image
+from collections import Counter
 
-# Configurar la página
-st.set_page_config(page_title="Análisis de Texto con TextBlob", layout="wide")
+# 1. Leer el archivo de texto
+def leer_archivo(ruta):
+    with open(ruta, 'r') as file:
+        return file.read()
 
-# Mostrar imagen decorativa
-imagen = Image.open("imagen_decorativa.jpg")
-st.image(imagen, use_column_width=True)
+# 2. Preprocesamiento del texto: eliminar caracteres no deseados
+def preprocesar_texto(texto):
+    texto = texto.lower()
+    texto = ''.join([c if c.isalnum() or c.isspace() else ' ' for c in texto])
+    return texto
 
-# Título estilizado y descripción
-st.markdown("""
-    <h1 style='text-align: center; color: #4B8BBE;'>📝 Analizador de Texto con TextBlob</h1>
-    <p style='text-align: center; font-size: 18px;'>Esta aplicación utiliza TextBlob para realizar un análisis básico de texto:<br>
-    - Análisis de sentimiento y subjetividad<br>
-    - Extracción de palabras clave<br>
-    - Análisis de frecuencia de palabras</p>
-""", unsafe_allow_html=True)
+# 3. Contar las palabras
+def contar_palabras(texto):
+    palabras = texto.split()
+    contador = Counter(palabras)
+    return contador
 
-# Área de entrada de texto
-texto = st.text_area("Introduce el texto que quieres analizar:", height=200)
+# 4. Generar un gráfico de barras con las palabras más comunes
+def generar_grafico(contador):
+    palabras_comunes = contador.most_common(10)
+    palabras = [x[0] for x in palabras_comunes]
+    cantidades = [x[1] for x in palabras_comunes]
 
-# Botón para ejecutar el análisis
-if st.button("Analizar"):
-    if texto.strip() == "":
-        st.warning("Por favor, introduce algún texto para analizar.")
-    else:
-        # Crear el objeto TextBlob
-        blob = TextBlob(texto)
+    plt.figure(figsize=(10,6))
+    plt.barh(palabras, cantidades, color='skyblue')
+    plt.xlabel('Frecuencia')
+    plt.title('Top 10 palabras más comunes')
+    plt.gca().invert_yaxis()
+    plt.show()
 
-        # Mostrar análisis de sentimiento
-        st.subheader("📊 Análisis de Sentimiento")
-        polaridad = blob.sentiment.polarity
-        subjetividad = blob.sentiment.subjectivity
+# 5. Función principal para ejecutar el script
+def main():
+    # Ruta del archivo de texto
+    ruta = 'path_to_your_text_file.txt'  # Actualiza esta ruta
+    texto = leer_archivo(ruta)
+    texto_procesado = preprocesar_texto(texto)
+    contador = contar_palabras(texto_procesado)
+    generar_grafico(contador)
 
-        st.write(f"**Polaridad:** {polaridad:.2f}")
-        st.write(f"**Subjetividad:** {subjetividad:.2f}")
-
-        if polaridad > 0:
-            st.success("El texto tiene un sentimiento positivo.")
-        elif polaridad < 0:
-            st.error("El texto tiene un sentimiento negativo.")
-        else:
-            st.info("El texto es neutral.")
-
-        # Palabras clave (sustantivos más comunes)
-        st.subheader("🔑 Palabras Clave")
-        palabras_clave = [word for word, tag in blob.tags if tag == 'NN']
-        palabras_frecuentes = Counter(palabras_clave).most_common(5)
-
-        if palabras_frecuentes:
-            for palabra, frecuencia in palabras_frecuentes:
-                st.write(f"- {palabra} ({frecuencia} veces)")
-        else:
-            st.write("No se encontraron sustantivos clave.")
-
-        # WordCloud
-        st.subheader("☁️ Nube de Palabras")
-        palabras_limpias = re.findall(r'\w+', texto.lower())
-        texto_limpio = " ".join(palabras_limpias)
-
-        if texto_limpio:
-            nube = WordCloud(width=800, height=400, background_color='white').generate(texto_limpio)
-            fig, ax = plt.subplots()
-            ax.imshow(nube, interpolation='bilinear')
-            ax.axis("off")
-            st.pyplot(fig)
-        else:
-            st.write("No hay suficiente contenido para generar una nube de palabras.")
+# Llamar a la función principal
+if __name__ == "__main__":
+    main()
